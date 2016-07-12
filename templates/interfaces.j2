@@ -1,0 +1,152 @@
+# {{ ansible_managed }}
+
+# The loopback network interface
+auto lo
+iface lo inet loopback
+
+pre-up /sbin/ethtool -K lo gro off
+
+{% for item in networks %}
+{% if item.ip is defined or item.vlan_interface is defined %}
+{% if 'bond' not in item.interface %}
+# {{ item.description }}
+auto {{ item.interface }}
+iface {{ item.interface }} inet static
+{% if item.ip is defined %}
+        address {{ item.ip }}
+        netmask {{ item.netmask }}
+        network {{ item.network }}
+
+{% if item.gateway is defined %}
+        gateway {{ item.gateway }}
+        # dns-* options are implemented by the resolvconf package, if installed
+        dns-nameservers {% for nameserver in nameservers %}{{ nameserver }} {% endfor %}
+        
+        dns-search {{ domain }}
+{% endif %}
+{% endif %}
+
+pre-up /sbin/ethtool -K {{ item.interface }} gro off
+{% if networks_ipv6 is defined %}
+{% for ipv6 in networks_ipv6 %}
+{% if item.interface == ipv6.interface %}
+
+iface {{ ipv6.interface }} inet6 static
+pre-up modprobe ipv6
+address {{ ipv6.ip }}
+netmask {{ ipv6.netmask }}
+{% if ipv6.gateway is defined %}
+gateway {{ ipv6.gateway }}
+up ip -6 addr add {{ ipv6.ip }}/128 dev {{ ipv6.interface }}
+{% endif %}
+{% endif %}
+{% endfor %}
+{% endif %}
+
+{% if custom_routes is defined %}
+{% for custom_route in custom_routes %}
+{% if custom_route.interface == item.interface %}
+
+# Custom route to {{ custom_route.dest_network }} over {{ item.description }} ({{ item.interface }})
+{% if custom_route.gateway is defined %}
+up route add -net {{ custom_route.dest_network }} netmask {{ custom_route.dest_netmask }} gateway {{ custom_route.gateway }} dev {{ custom_route.interface }}
+{% else %}
+up route add -net {{ custom_route.dest_network }} netmask {{ custom_route.dest_netmask }} dev {{ custom_route.interface }}
+{% endif %}
+{% endif %}
+{% endfor %}
+{% endif %}
+{% elif 'bond' in item.interface %}
+{% if item.slaves is defined %}
+
+# Slave Interfaces for {{ item.interface }}
+{% for slave in item.slaves %}
+auto {{ slave }}
+iface {{ slave }} inet manual
+bond-master {{ item.interface }}
+{% if item.bond_mode == "1" %}
+bond-primary {% for slave in item.slaves %}{{ slave }} {% endfor %}
+
+{% endif %}
+
+{% endfor %}
+{% endif %}
+
+# {{ item.description }}
+auto {{ item.interface }}
+iface {{ item.interface }} inet static
+{% if item.ip is defined %}
+        address {{ item.ip }}
+        netmask {{ item.netmask }}
+        network {{ item.network }}
+
+{% if item.gateway is defined %}
+        gateway {{ item.gateway }}
+        # dns-* options are implemented by the resolvconf package, if installed
+        dns-nameservers {% for nameserver in nameservers %}{{ nameserver }} {% endfor %}
+        
+        dns-search {{ domain }}
+{% endif %}
+{% endif %}
+
+{% if item.bond_mode == "4" %}
+        bond-mode 4
+        bond-lacp-rate 1
+        bond-miimon 100
+        bond-slaves none
+        bond-xmit-hash-policy layer3+4
+{% elif item.bond_mode == "1" %}
+        bond-mode 1
+        bond-miimon 100
+        bond-slaves none
+{% endif %}
+{% if networks_ipv6 is defined %}
+{% for ipv6 in networks_ipv6 %}
+{% if item.interface == ipv6.interface %}
+{% if ipv6.gateway is defined %}
+
+iface {{ ipv6.interface }} inet6 static
+pre-up modprobe ipv6
+address {{ ipv6.ip }}
+netmask {{ ipv6.netmask }}
+gateway {{ ipv6.gateway }}
+{% endif %}
+up ip -6 addr add {{ ipv6.ip }}/128 dev {{ ipv6.interface }}
+{% endif %}
+{% endfor %}
+{% endif %}
+{% if custom_routes is defined %}
+{% for custom_route in custom_routes %}
+{% if custom_route.interface == item.interface %}
+
+# Custom route to {{ custom_route.dest_network }} over {{ item.description }} ({{ item.interface }})
+up route add -net {{ custom_route.dest_network }} netmask {{ custom_route.dest_netmask }} gateway {{ custom_route.gateway }} dev {{ custom_route.interface }}
+{% endif %}
+{% endfor %}
+{% endif %}
+
+pre-up /sbin/ethtool -K {{ item.interface }} gro off
+{% endif %}
+{% endif %}
+{% endfor %}
+{% if vlans is defined %}
+{% for item in vlans %}
+
+auto {{ item.interface }}
+iface {{ item.interface }} inet static
+        address {{ item.ip }}
+        netmask {{ item.netmask }}
+{% if item.gateway is defined %}
+        gateway {{ item.gateway }}
+{% endif %}
+        vlan-raw-device {{ item.interface.split('.')[0] }}
+
+{% if custom_routes is defined %}
+{% for custom_route in custom_routes %}
+{% if custom_route.interface == item.interface %}
+up route add -net {{ custom_route.dest_network }} netmask {{ custom_route.dest_netmask }} gateway {{ custom_route.gateway }} dev {{ custom_route.interface }}
+{% endif %}
+{% endfor %}
+{% endif %}
+{% endfor %}
+{% endif %}

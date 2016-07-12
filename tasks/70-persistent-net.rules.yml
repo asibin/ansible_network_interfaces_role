@@ -1,0 +1,26 @@
+- name: Generate 70-persistent-net.rules.yml
+  template:
+      src=70-persistent-net.rules.j2
+      dest=/etc/udev/rules.d/70-persistent-net.rules
+      owner=root
+      group=root
+      mode=644
+  with_items:
+    - "{{ networks }}"
+  when: ansible_distribution_version == "12.04"
+
+- name: Override biosdevname in udev
+  lineinfile:
+      dest=/lib/udev/rules.d/71-biosdevname.rules
+      state=present
+      regexp="^# GOTO=\"netdevicename_end\"$"
+      line="GOTO=\"netdevicename_end\""
+      backrefs=yes
+      create=yes
+  when: ansible_distribution_version == "14.04"
+
+# GRUB update is not a handler because if operator forgets some of the networking parameters
+# playbook fails and grub handlers never get executed
+- name: Update GRUB
+  command: sudo update-grub
+  changed_when: False

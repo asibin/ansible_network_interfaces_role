@@ -1,0 +1,25 @@
+- name: Install networking packages
+  apt:
+    name="{{ item }}"
+    state=installed
+    update_cache=yes
+  with_items:
+    - ifenslave-2.6
+    - vlan
+    - ethtool
+
+- name: Include fix for permanent renaming of interfaces
+  include: 70-persistent-net.rules.yml
+  when: ansible_distribution_version == "12.04"
+
+- name: Generate networking template
+  template:
+      src=interfaces.j2
+      dest=/etc/network/interfaces
+      owner=root
+      group=root
+      mode=644
+  with_items:
+    - "{{ networks }}"
+#  notify:
+#    networking restart
